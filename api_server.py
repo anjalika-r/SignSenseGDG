@@ -21,14 +21,14 @@ def allowed_origins():
 
 
 def letter_catalog():
-    config = json.loads((MODEL_REPO / 'models/letters_three_signers/inference_config.json').read_text())
+    config = json.loads((MODEL_REPO / 'models/letters_airv_no_r_shape_contact/inference_config.json').read_text())
     references = {}
     for path in sorted(LETTER_DIR.glob('reference_*.jpg')):
         match = re.fullmatch(r'reference_([A-Z])_\1_\d+\.jpg', path.name)
         if match and match[1] in config['class_names']:
             references.setdefault(match[1], []).append('/assets/letter_signs/' + path.name)
     return {'letters': [{'letter': letter, 'images': images} for letter, images in references.items()],
-            'window_seconds': config['window_seconds'], 'model_version': 'letters_three_signers'}
+            'window_seconds': config['window_seconds'], 'model_version': 'letters_airv_no_r_shape_contact'}
 
 
 class ApiHandler(BaseHTTPRequestHandler):
@@ -125,11 +125,13 @@ class ApiHandler(BaseHTTPRequestHandler):
                 raise ValueError('Choose a supported letter from the exercise.')
             from letter_predictor import LetterPredictor
             if PREDICTOR is None:
-                PREDICTOR = LetterPredictor(MODEL_REPO / 'models/letters_three_signers',
+                PREDICTOR = LetterPredictor(MODEL_REPO / 'models/letters_airv_no_r_shape_contact',
                                             MODEL_REPO / 'models/holistic_landmarker.task',
-                                            float(os.environ.get('SIGNSENSE_LETTER_THRESHOLD', '0.8')))
+                                            float(os.environ.get('SIGNSENSE_LETTER_THRESHOLD', '0.85')))
             result = PREDICTOR.predict(body.get('frames'), expected)
-            self.send_json(200, dict(result, expected_letter=expected, model_version='letters_three_signers'))
+            self.send_json(200, dict(result, expected_letter=expected,
+                                     model_version='letters_airv_no_r_shape_contact',
+                                     model_info=PREDICTOR.model_info))
         except (ValueError, TypeError) as exc:
             self.send_json(400, {'error': str(exc)})
         except Exception:

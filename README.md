@@ -27,10 +27,10 @@ the full path of that repository. Run the server with the Python environment
 that has the model dependencies installed:
 
 ```powershell
-cd C:\Users\mathu\Modeltraining
+cd filepath_of_Modeltraining_repo
 python -m pip install -r requirements.txt
-cd C:\Users\mathu\SignSenseGDG
-$env:SIGNSENSE_MODEL_REPO = 'C:\Users\mathu\Modeltraining'
+cd filepath_of_SignSenseGDG_repo
+$env:SIGNSENSE_MODEL_REPO = 'filepath of Modeltraining repo'
 python start_letters.py
 ```
 
@@ -42,11 +42,6 @@ avoids starting the website in a Python environment without TensorFlow. To
 select an environment explicitly, set `SIGNSENSE_PYTHON` to its full Python
 executable path. Stop an existing server with Ctrl+C before restarting.
 
-For this computer, a direct alternative is:
-
-```powershell
-& 'C:\Users\mathu\miniconda3\python.exe' serve.py
-```
 Start the camera, copy the displayed photo, and select **Check my sign**.
 After a three-second countdown, hold/perform the letter for about three seconds.
 Keep shoulders and signing hands visible. The first check loads the model and
@@ -55,14 +50,14 @@ can take longer. Use **Try again**, **Next letter**, or **Shuffle a new round**.
 The server uses these local assets, without copying model binaries into this repo:
 
 - `Modeltraining/scripts/letter_predictor.py` and `sign_features.py`
-- `Modeltraining/models/letters_three_signers/best_lstm_model.keras`
-- `Modeltraining/models/letters_three_signers/inference_config.json`
+- `Modeltraining/models/letters_three_signers_mirrored/best_lstm_model.keras`
+- `Modeltraining/models/letters_three_signers_mirrored/inference_config.json`
 - `Modeltraining/models/holistic_landmarker.task`
 
-`SIGNSENSE_LETTER_THRESHOLD` optionally overrides the default 0.8 acceptance
+`SIGNSENSE_LETTER_THRESHOLD` optionally overrides the default 0.85 acceptance
 threshold. It is an uncalibrated model score, not a technique accuracy score.
 Lowering it does not improve the model. Low scores or lost tracking yield
-**uncertain**, not a failed letter. A confident different letter prompts a retry.
+**uncertain**, with no guessed letter displayed. A confident different letter prompts a retry.
 Moving on is always allowed; matches are saved separately from word scores.
 
 There are currently 21 letters with both model support and reference photos.
