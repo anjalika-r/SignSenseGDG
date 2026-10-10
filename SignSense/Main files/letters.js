@@ -2,6 +2,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   const camera = $('camera');
+  const loadingScreen = $('model-loading');
   let catalog = [], deck = [], index = 0, photoIndex = 0, duration = 3;
   let stream = null, busy = false, disposed = false, controller = null;
   let scores = SignSenseProgress.read().letters || {};
@@ -9,6 +10,17 @@
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const current = () => deck[index];
   let celebrationTimer;
+
+  function setModelState(message, ready = false) {
+    $('model-loading-message').textContent = message;
+    $('model-state').textContent = ready ? '✓ Recognition ready' : 'Preparing recognition…';
+    $('model-state').classList.toggle('ready', ready);
+  }
+
+  function hideLoadingScreen() {
+    loadingScreen.classList.add('is-ready');
+    setTimeout(() => loadingScreen.remove(), 360);
+  }
 
   function shuffle(items) {
     const result = [...items];
@@ -126,14 +138,13 @@
     let timeout;
     controls();
     $('detected').textContent = '';
-    feedback('Get ready…', 'Bring your hands into position before the countdown ends.');
+    feedback('Sign now', 'Recording starts immediately. Perform the sign at your natural pace.');
     const overlay = $('capture-overlay');
     const active = () => {
       if (disposed || signal.aborted || document.hidden || !stream || !stream.getVideoTracks()[0]?.enabled || stream.getVideoTracks()[0]?.readyState !== 'live') throw new Error('Capture interrupted. Keep this tab open and try again.');
     };
     try {
       overlay.hidden = false;
-      for (let n = 3; n > 0; n--) { active(); overlay.textContent = String(n); await sleep(1000); }
       const canvas = document.createElement('canvas');
       if (!camera.videoWidth || !camera.videoHeight) throw new Error('Camera is still starting. Please try again.');
       canvas.width = 640;
@@ -144,10 +155,10 @@
       const started = performance.now();
       let previousTime = -1;
       $('camera-state').textContent = 'Recording your sign';
+      overlay.textContent = `Recording ${expected}…`;
       while (true) {
         active();
         const elapsed = performance.now() - started;
-        overlay.textContent = `Sign ${expected} · ${Math.max(0, Math.ceil(duration - elapsed / 1000))}s`;
         if (camera.readyState >= 2 && camera.currentTime !== previousTime) {
           previousTime = camera.currentTime;
           // CSS mirrors only the preview; model pixels keep the camera orientation.
@@ -160,7 +171,7 @@
         if (elapsed > (duration + 0.8) * 1000) throw new Error('Camera frames were too slow. Please try again.');
         await sleep(100);
       }
-      overlay.textContent = 'Checking…';
+      overlay.textContent = 'Analysing your sign…';
       $('camera-state').textContent = 'Checking your sign';
       feedback('Checking your sign…', 'The first check can take longer while recognition starts.');
       timeout = setTimeout(() => controller?.abort(), 120000);
@@ -207,15 +218,27 @@
   });
   window.addEventListener('pagehide', () => { disposed = true; controller?.abort(); stopCamera(); });
   window.addEventListener('pageshow', () => { disposed = false; });
-  fetch(SignSenseApi.url('/api/letters'), { signal: AbortSignal.timeout(15000) }).then(async response => {
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error);
-    if (!result.letters?.length) throw new Error('No supported reference photos were found.');
-    catalog = result.letters;
-    duration = result.window_seconds;
-    newRound();
-  }).catch(error => {
+  (async () => {
+    try {
+      setModelState('Loading your practice letters…');
+      const lettersResponse = await fetch(SignSenseApi.url('/api/letters'), { signal: AbortSignal.timeout(15000) });
+      const result = await lettersResponse.json();
+      if (!lettersResponse.ok) throw new Error(result.error);
+      if (!result.letters?.length) throw new Error('No supported reference photos were found.');
+      catalog = result.letters;
+      duration = result.window_seconds;
+      setModelState('Preparing the recognition model…');
+      const modelResponse = await fetch(SignSenseApi.url('/api/model-status'), { signal: AbortSignal.timeout(120000) });
+      const model = await modelResponse.json();
+      if (!modelResponse.ok || !model.ready) throw new Error(model.error || 'Recognition model could not be prepared.');
+      setModelState('Recognition ready', true);
+      newRound();
+      hideLoadingScreen();
+    } catch (error) {
+      loadingScreen.remove();
     $('round-progress').textContent = 'Letter practice unavailable';
+    $('model-state').textContent = 'Recognition unavailable';
     feedback('Unable to load letters', `${error.message} Start the app with python serve.py and reload this page.`, 'uncertain');
-  });
+    }
+  })();
 })();

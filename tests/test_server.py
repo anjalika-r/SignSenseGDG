@@ -42,6 +42,8 @@ class TestLetterCatalogUnit(unittest.TestCase):
             self.assertEqual(catalog['window_seconds'], 3.0)
             self.assertNotIn('H', [item['letter'] for item in catalog['letters']])
             self.assertNotIn('J', [item['letter'] for item in catalog['letters']])
+            for unsupported in 'IULVMNR':
+                self.assertNotIn(unsupported, [item['letter'] for item in catalog['letters']])
         finally:
             serve.MODEL_REPO = original_repo
 
