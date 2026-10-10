@@ -14,18 +14,6 @@ MAX_UPLOAD = 12 * 1024 * 1024
 INFERENCE_LOCK = threading.Lock()
 PREDICTOR = None
 LETTER_DIR = Path('/app/letter_signs')
-EXCLUDED_LETTERS = frozenset({'I', 'U', 'L', 'V', 'M', 'N', 'R'})
-
-
-def load_predictor():
-    """Load the selected model once, shared by warm-up and predictions."""
-    global PREDICTOR
-    if PREDICTOR is None:
-        from letter_predictor import LetterPredictor
-        PREDICTOR = LetterPredictor(MODEL_REPO / 'models/letters_airv_no_r_shape_contact',
-                                    MODEL_REPO / 'models/holistic_landmarker.task',
-                                    float(os.environ.get('SIGNSENSE_LETTER_THRESHOLD', '0.85')))
-    return PREDICTOR
 
 
 def allowed_origins():
@@ -37,7 +25,7 @@ def letter_catalog():
     references = {}
     for path in sorted(LETTER_DIR.glob('reference_*.jpg')):
         match = re.fullmatch(r'reference_([A-Z])_\1_\d+\.jpg', path.name)
-        if match and match[1] in config['class_names'] and match[1] not in EXCLUDED_LETTERS:
+        if match and match[1] in config['class_names']:
             references.setdefault(match[1], []).append('/assets/letter_signs/' + path.name)
     return {'letters': [{'letter': letter, 'images': images} for letter, images in references.items()],
             'window_seconds': config['window_seconds'], 'model_version': 'letters_airv_no_r_shape_contact'}
@@ -82,20 +70,6 @@ class ApiHandler(BaseHTTPRequestHandler):
         path = self.path.split('?', 1)[0]
         if path == '/healthz':
             self.send_json(200, {'ok': True})
-            return
-        if path == '/api/model-status':
-            if self.headers.get('Origin') and not self.cors_origin():
-                self.send_json(403, {'error': 'Origin is not allowed.'})
-                return
-            try:
-                with INFERENCE_LOCK:
-                    predictor = load_predictor()
-                self.send_json(200, {'ready': True, 'model_version': 'letters_airv_no_r_shape_contact',
-                                     'model_info': predictor.model_info})
-            except Exception:
-                import traceback
-                traceback.print_exc()
-                self.send_json(503, {'error': 'Recognition model could not be prepared.'})
             return
         if path != '/api/letters':
             if path.startswith('/assets/letter_signs/'):
@@ -149,11 +123,15 @@ class ApiHandler(BaseHTTPRequestHandler):
             expected = body.get('letter') if isinstance(body, dict) else None
             if expected not in {item['letter'] for item in letter_catalog()['letters']}:
                 raise ValueError('Choose a supported letter from the exercise.')
-            predictor = load_predictor()
-            result = predictor.predict(body.get('frames'), expected)
+            from letter_predictor import LetterPredictor
+            if PREDICTOR is None:
+                PREDICTOR = LetterPredictor(MODEL_REPO / 'models/letters_airv_no_r_shape_contact',
+                                            MODEL_REPO / 'models/holistic_landmarker.task',
+                                            float(os.environ.get('SIGNSENSE_LETTER_THRESHOLD', '0.85')))
+            result = PREDICTOR.predict(body.get('frames'), expected)
             self.send_json(200, dict(result, expected_letter=expected,
                                      model_version='letters_airv_no_r_shape_contact',
-                                     model_info=predictor.model_info))
+                                     model_info=PREDICTOR.model_info))
         except (ValueError, TypeError) as exc:
             self.send_json(400, {'error': str(exc)})
         except Exception:
